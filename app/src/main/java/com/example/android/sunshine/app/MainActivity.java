@@ -75,7 +75,7 @@ public class MainActivity extends AppCompatActivity implements ForecastFragment.
                     public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
                         Log.v(LOG_TAG, "CONNECTION FAILED");
                     }
-                }).addApiIfAvailable(Wearable.API)
+                }).addApi(Wearable.API)
                 .build();
         mGoogleApiClient.connect();
 
