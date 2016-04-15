@@ -7,14 +7,14 @@ import android.graphics.Bitmap;
  */
 public class SimpleWeatherData {
 
-    int high;
-    int low;
-    Bitmap weatherIcon;
+    String high;
+    String low;
+    Bitmap icon;
 
-    public SimpleWeatherData(int high, int low, Bitmap weatherIcon) {
+    public SimpleWeatherData(String high, String low, Bitmap icon) {
         this.high = high;
         this.low = low;
-        this.weatherIcon = weatherIcon;
+        this.icon = icon;
     }
 
 }
