@@ -67,7 +67,9 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
     private static final String LOG_TAG = "SunshineWatchFace";
     private static final String WEATHER_DATA_PATH = "/weather";
-    private static final String WEATHER_REQUEST_PATH = "/weather_request";
+    private static final String WEATHER_REQUEST_TIME = "time";
+    private static final String WEATHER_BOUNDS_SIZE = "size";
+    private static final String WEATHER_DPI = "dpi";
     private static final String WEATHER_BITMAP = "bitmap";
     private static final String WEATHER_HIGH = "high";
     private static final String WEATHER_LOW = "low";
@@ -76,6 +78,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
     private GoogleApiClient mGoogleApiClient;
     private static SimpleWeatherData sSimpleWeatherData = null;
+    private static int mScreenSize;
 
     private static final Typeface NORMAL_TYPEFACE =
             Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL);
@@ -85,12 +88,13 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
      * displayed in interactive mode.
      */
     private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(1);
-    private static final long WEATHER_UPDATE_RATE_MS = TimeUnit.HOURS.toMillis(1);
+    private static final long WEATHER_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(10);
 
     /**
      * Handler message id for updating the time periodically in interactive mode.
      */
     private static final int MSG_UPDATE_TIME = 0;
+    private static final int MSG_UPDATE_WEATHER = 1;
 
     @Override
     public Engine onCreateEngine() {
@@ -99,7 +103,6 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
     }
 
     private class Engine extends CanvasWatchFaceService.Engine implements DataApi.DataListener {
-
 
         final Handler mUpdateTimeHandler = new EngineHandler(this);
         boolean mRegisteredTimeZoneReceiver = false;
@@ -152,19 +155,17 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
             mCalendar = Calendar.getInstance();
 
-            Log.v(LOG_TAG, "START!");
             mGoogleApiClient = new GoogleApiClient.Builder(mContext)
                     .addApi(Wearable.API)
                     .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
                         @Override
                         public void onConnected(@Nullable Bundle bundle) {
                             Wearable.DataApi.addListener(mGoogleApiClient, Engine.this);
-                            requestWeather();
                         }
 
                         @Override
                         public void onConnectionSuspended(int i) {
-                            Log.v(LOG_TAG, "CONNECTION SUSPENDED!");
+                            mGoogleApiClient.disconnect();
 
                         }
                     })
@@ -174,7 +175,6 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                             Log.v(LOG_TAG, "CONNECTION FAILED!");
                         }
                     }).build();
-            mGoogleApiClient.connect();
 
         }
 
@@ -185,18 +185,21 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                 if (event.getType() == DataEvent.TYPE_CHANGED) {
                     DataItem item = event.getDataItem();
                     if (item.getUri().getPath().compareTo(WEATHER_DATA_PATH) == 0) {
-                        updateWeather(item);
+                        DataMap map = DataMapItem.fromDataItem(item).getDataMap();
+                        if (!map.containsKey(WEATHER_REQUEST_TIME)) {
+                            updateWeather(item);
+                        }
                     }
                 }
             }
         }
 
         private void updateWeather(DataItem item) {
+            Log.v(LOG_TAG, "Updating Weather Info");
             new AsyncTask<DataMap, Void, Bitmap>() {
 
                 @Override
                 protected Bitmap doInBackground(DataMap... params) {
-
                     DataMap dataMap = params[0];
 
                     String high = dataMap.getString(WEATHER_HIGH);
@@ -211,21 +214,30 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                     // convert asset into a file descriptor and block until it's ready
                     InputStream assetInputStream = Wearable.DataApi.getFdForAsset(
                             mGoogleApiClient, iconAsset).await().getInputStream();
-                    mGoogleApiClient.disconnect();
+
+                    //TODO Is this necessary or is it terminating things early
+//                    mGoogleApiClient.disconnect();
 
                     // decode the stream into a bitmap
                     Bitmap icon = BitmapFactory.decodeStream(assetInputStream);
+//                    icon = getResizedBitmap(icon);
+
                     sSimpleWeatherData = new SimpleWeatherData(high, low, icon);
                     invalidate();
                     return null;
                 }
 
             }.execute(DataMapItem.fromDataItem(item).getDataMap());
+
+
         }
 
         private void requestWeather() {
-            PutDataMapRequest request = PutDataMapRequest.create(WEATHER_REQUEST_PATH);
-            request.getDataMap().putLong("TIME", Calendar.getInstance().getTimeInMillis());
+            Log.v(LOG_TAG, "Sending request for updated weather info");
+            PutDataMapRequest request = PutDataMapRequest.create(WEATHER_DATA_PATH);
+            request.getDataMap().putLong(WEATHER_REQUEST_TIME, System.currentTimeMillis());
+            request.getDataMap().putInt(WEATHER_BOUNDS_SIZE, mScreenSize);
+            request.getDataMap().putInt(WEATHER_DPI, getResources().getDisplayMetrics().densityDpi);
             Wearable.DataApi.putDataItem(mGoogleApiClient, request.asPutDataRequest());
         }
 
@@ -340,6 +352,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             }
 
             mCalendar = Calendar.getInstance();
+            mScreenSize = bounds.height();
 
             //            String digitalText = String.format("%d:%02d", mTime.hour, mTime.minute);
             String digitalText = new SimpleDateFormat("hh:mm").format(mCalendar.getTime());
@@ -379,8 +392,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
             if (weatherIcon != null) {
                 canvas.drawBitmap(weatherIcon,
-                        bounds.centerX() - weatherIcon.getWidth() / 2 - getResources().getDimension(R.dimen.temp_element_margin) * 3,
-                        bounds.centerY() + 24,
+                        bounds.centerX() - Math.round(getResources().getDimension(R.dimen.temp_element_margin) * 5.5),
+                        bounds.centerY() + 30,
                         null
                 );
             }
@@ -394,8 +407,10 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
          */
         private void updateTimer() {
             mUpdateTimeHandler.removeMessages(MSG_UPDATE_TIME);
+            mUpdateTimeHandler.removeMessages(MSG_UPDATE_WEATHER);
             if (shouldTimerBeRunning()) {
                 mUpdateTimeHandler.sendEmptyMessage(MSG_UPDATE_TIME);
+                mUpdateTimeHandler.sendEmptyMessage(MSG_UPDATE_WEATHER);
             }
         }
 
@@ -420,6 +435,20 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             }
         }
 
+        private void handleWeatherUpdateMessage() {
+            if (mGoogleApiClient.isConnected()) {
+                requestWeather();
+            } else {
+                mGoogleApiClient.connect();
+            }
+            if (shouldTimerBeRunning()) {
+                long timeMS = System.currentTimeMillis();
+                long delayMS = WEATHER_UPDATE_RATE_MS
+                        - (timeMS % WEATHER_UPDATE_RATE_MS);
+                mUpdateTimeHandler.sendEmptyMessageDelayed(MSG_UPDATE_WEATHER, delayMS);
+            }
+        }
+
     }
 
     private static class EngineHandler extends Handler {
@@ -436,6 +465,9 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                 switch (msg.what) {
                     case MSG_UPDATE_TIME:
                         engine.handleUpdateTimeMessage();
+                        break;
+                    case MSG_UPDATE_WEATHER:
+                        engine.handleWeatherUpdateMessage();
                         break;
                 }
             }

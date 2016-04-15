@@ -22,6 +22,8 @@ import com.google.android.gms.wearable.DataApi;
 import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
 import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataMap;
+import com.google.android.gms.wearable.DataMapItem;
 import com.google.android.gms.wearable.PutDataMapRequest;
 import com.google.android.gms.wearable.Wearable;
 
@@ -35,13 +37,17 @@ public class WearHandler implements DataApi.DataListener, LoaderManager.LoaderCa
 
     private static final String LOG_TAG = "WearHandler";
     private static final String WEATHER_DATA_PATH = "/weather";
-    private static final String WEATHER_REQUEST_PATH = "/weather_request";
+    private static final String WEATHER_REQUEST_TIME = "time";
+    private static final String WEATHER_BOUNDS_SIZE = "size";
+    private static final String WEATHER_DPI = "dpi";
     private static final String WEATHER_BITMAP = "bitmap";
     private static final String WEATHER_HIGH = "high";
     private static final String WEATHER_LOW = "low";
 
     private GoogleApiClient mGoogleApiClient;
     private AppCompatActivity mContext;
+    private int mScreenSize;
+    private int mDPI;
 
     public WearHandler(AppCompatActivity context) {
         mContext = context;
@@ -76,15 +82,20 @@ public class WearHandler implements DataApi.DataListener, LoaderManager.LoaderCa
         for (DataEvent event : dataEventBuffer) {
             if (event.getType() == DataEvent.TYPE_CHANGED) {
                 DataItem item = event.getDataItem();
-                if (item.getUri().getPath().compareTo(WEATHER_REQUEST_PATH) == 0) {
-                    sendWeatherPacket();
+                if (item.getUri().getPath().compareTo(WEATHER_DATA_PATH) == 0) {
+                    DataMap map = DataMapItem.fromDataItem(item).getDataMap();
+                    if (map.containsKey(WEATHER_REQUEST_TIME)) {
+                        Log.v(LOG_TAG, "Received request for new weather data...");
+                        mScreenSize = map.getInt(WEATHER_BOUNDS_SIZE);
+                        mDPI = map.getInt(WEATHER_DPI);
+                        sendWeatherPacket();
+                    }
                 }
             }
         }
     }
 
     public void sendWeatherPacket() {
-        Log.v(LOG_TAG, "Request to send new weather packet!!!");
         mContext.getSupportLoaderManager().initLoader(DETAIL_LOADER, null, this);
     }
 
@@ -128,15 +139,21 @@ public class WearHandler implements DataApi.DataListener, LoaderManager.LoaderCa
 
             int weatherId = data.getInt(COL_WEATHER_CONDITION_ID);
             BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inSampleSize = 1;
+
+//            Drawable drawable = mContext.getResources().getDrawableForDensity(Utility.getArtResourceForWeatherCondition(weatherId), requestedDPI, null);
             Bitmap image = BitmapFactory.decodeResource(mContext.getResources(), Utility.getArtResourceForWeatherCondition(weatherId), options);
-            image = getResizedBitmap(image, 72, 72);
-            Asset imageAsset = createAssetFromBitmap(image);
+            image = getResizedBitmap(image, mScreenSize/4, mScreenSize/4);
+
+            ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+            image.compress(Bitmap.CompressFormat.PNG, 100, byteStream);
+            Asset imageAsset = Asset.createFromBytes(byteStream.toByteArray());
 
             double high = data.getDouble(COL_WEATHER_MAX_TEMP);
             String highString = Utility.formatTemperature(mContext, high);
 
-            double low = data.getDouble(COL_WEATHER_MIN_TEMP);
+            //TODO Restore
+//            double low = data.getDouble(COL_WEATHER_MIN_TEMP);
+            double low = Calendar.getInstance().get(Calendar.SECOND);
             String lowString = Utility.formatTemperature(mContext, low);
 
             PutDataMapRequest request = PutDataMapRequest.create(WEATHER_DATA_PATH);
@@ -145,11 +162,10 @@ public class WearHandler implements DataApi.DataListener, LoaderManager.LoaderCa
             request.getDataMap().putString(WEATHER_LOW, lowString);
             request.getDataMap().putAsset(WEATHER_BITMAP, imageAsset);
             Wearable.DataApi.putDataItem(mGoogleApiClient, request.asPutDataRequest());
-
+            Log.v(LOG_TAG, "New weather data sent...");
         }
     }
 
-    // From jeet.chanchawat on StackOverflow (http://stackoverflow.com/a/10703256)
     public Bitmap getResizedBitmap(Bitmap bm, int newWidth, int newHeight) {
         int width = bm.getWidth();
         int height = bm.getHeight();
@@ -165,13 +181,6 @@ public class WearHandler implements DataApi.DataListener, LoaderManager.LoaderCa
                 bm, 0, 0, width, height, matrix, false);
         bm.recycle();
         return resizedBitmap;
-    }
-
-
-    private static Asset createAssetFromBitmap(Bitmap bitmap) {
-        final ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteStream);
-        return Asset.createFromBytes(byteStream.toByteArray());
     }
 
     @Override
