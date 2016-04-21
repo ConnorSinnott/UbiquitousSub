@@ -35,7 +35,6 @@ import com.example.android.sunshine.app.gcm.RegistrationIntentService;
 import com.example.android.sunshine.app.sync.SunshineSyncAdapter;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
-import com.google.android.gms.common.api.GoogleApiClient;
 
 public class MainActivity extends AppCompatActivity implements ForecastFragment.Callback {
 
@@ -44,12 +43,8 @@ public class MainActivity extends AppCompatActivity implements ForecastFragment.
     private final static int PLAY_SERVICES_RESOLUTION_REQUEST = 9000;
     public static final String SENT_TOKEN_TO_SERVER = "sentTokenToServer";
 
-    private static WearHandler sWearHandler;
-
     private boolean mTwoPane;
     private String mLocation;
-
-    private GoogleApiClient mGoogleApiClient;
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
@@ -119,8 +114,6 @@ public class MainActivity extends AppCompatActivity implements ForecastFragment.
             }
         }
 
-        sWearHandler = new WearHandler(this);
-
     }
 
     @Override
@@ -129,6 +122,7 @@ public class MainActivity extends AppCompatActivity implements ForecastFragment.
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
+
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
@@ -139,8 +133,7 @@ public class MainActivity extends AppCompatActivity implements ForecastFragment.
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
-            sWearHandler.sendWeatherPacket();
-//            startActivity(new Intent(this, SettingsActivity.class));
+            startActivity(new Intent(this, SettingsActivity.class));
             return true;
         }
 
