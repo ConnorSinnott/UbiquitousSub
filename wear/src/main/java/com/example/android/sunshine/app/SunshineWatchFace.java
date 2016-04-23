@@ -86,8 +86,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
      * displayed in interactive mode.
      */
     private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(1);
-    private static final long WEATHER_UPDATE_STANDARD = TimeUnit.SECONDS.toMillis(30);
-    private static final long WEATHER_UPDATE_RETRY = TimeUnit.SECONDS.toMillis(10);
+    private static final long WEATHER_UPDATE_STANDARD = TimeUnit.MINUTES.toMillis(30);
+    private static final long WEATHER_UPDATE_RETRY = TimeUnit.SECONDS.toMillis(30);
     private static long sWeatherUpdateRateMs = WEATHER_UPDATE_RETRY;
 
     /**
