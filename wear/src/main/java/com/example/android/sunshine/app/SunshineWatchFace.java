@@ -32,11 +32,9 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
-import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
@@ -69,7 +67,6 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
     private static final String WEATHER_DATA_PATH = "/weather";
     private static final String WEATHER_REQUEST_TIME = "time";
     private static final String WEATHER_BOUNDS_SIZE = "size";
-    private static final String WEATHER_DPI = "dpi";
     private static final String WEATHER_BITMAP = "bitmap";
     private static final String WEATHER_HIGH = "high";
     private static final String WEATHER_LOW = "low";
@@ -79,6 +76,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
     private GoogleApiClient mGoogleApiClient;
     private static SimpleWeatherData sSimpleWeatherData = null;
     private static int mScreenSize;
+    private static boolean mInitialConnect = true;
 
     private static final Typeface NORMAL_TYPEFACE =
             Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL);
@@ -88,7 +86,9 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
      * displayed in interactive mode.
      */
     private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(1);
-    private static final long WEATHER_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(10);
+    private static final long WEATHER_UPDATE_STANDARD = TimeUnit.SECONDS.toMillis(30);
+    private static final long WEATHER_UPDATE_RETRY = TimeUnit.SECONDS.toMillis(10);
+    private static long sWeatherUpdateRateMs = WEATHER_UPDATE_RETRY;
 
     /**
      * Handler message id for updating the time periodically in interactive mode.
@@ -165,14 +165,6 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
                         @Override
                         public void onConnectionSuspended(int i) {
-                            mGoogleApiClient.disconnect();
-
-                        }
-                    })
-                    .addOnConnectionFailedListener(new GoogleApiClient.OnConnectionFailedListener() {
-                        @Override
-                        public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-                            Log.v(LOG_TAG, "CONNECTION FAILED!");
                         }
                     }).build();
 
@@ -195,7 +187,6 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         }
 
         private void updateWeather(DataItem item) {
-            Log.v(LOG_TAG, "Updating Weather Info");
             new AsyncTask<DataMap, Void, Bitmap>() {
 
                 @Override
@@ -215,29 +206,27 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                     InputStream assetInputStream = Wearable.DataApi.getFdForAsset(
                             mGoogleApiClient, iconAsset).await().getInputStream();
 
-                    //TODO Is this necessary or is it terminating things early
-//                    mGoogleApiClient.disconnect();
-
                     // decode the stream into a bitmap
                     Bitmap icon = BitmapFactory.decodeStream(assetInputStream);
 //                    icon = getResizedBitmap(icon);
 
                     sSimpleWeatherData = new SimpleWeatherData(high, low, icon);
+
+                    sWeatherUpdateRateMs = WEATHER_UPDATE_STANDARD;
+
                     invalidate();
+
                     return null;
+
                 }
 
             }.execute(DataMapItem.fromDataItem(item).getDataMap());
-
-
         }
 
         private void requestWeather() {
-            Log.v(LOG_TAG, "Sending request for updated weather info");
             PutDataMapRequest request = PutDataMapRequest.create(WEATHER_DATA_PATH);
             request.getDataMap().putLong(WEATHER_REQUEST_TIME, System.currentTimeMillis());
             request.getDataMap().putInt(WEATHER_BOUNDS_SIZE, mScreenSize);
-            request.getDataMap().putInt(WEATHER_DPI, getResources().getDisplayMetrics().densityDpi);
             Wearable.DataApi.putDataItem(mGoogleApiClient, request.asPutDataRequest());
         }
 
@@ -436,17 +425,20 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         }
 
         private void handleWeatherUpdateMessage() {
-            if (mGoogleApiClient.isConnected()) {
-                requestWeather();
-            } else {
+            if (!mGoogleApiClient.isConnected()) {
                 mGoogleApiClient.connect();
+            }
+            if (mInitialConnect) {
+                sWeatherUpdateRateMs = WEATHER_UPDATE_RETRY;
+                mInitialConnect = false;
             }
             if (shouldTimerBeRunning()) {
                 long timeMS = System.currentTimeMillis();
-                long delayMS = WEATHER_UPDATE_RATE_MS
-                        - (timeMS % WEATHER_UPDATE_RATE_MS);
+                long delayMS = sWeatherUpdateRateMs
+                        - (timeMS % sWeatherUpdateRateMs);
                 mUpdateTimeHandler.sendEmptyMessageDelayed(MSG_UPDATE_WEATHER, delayMS);
             }
+            requestWeather();
         }
 
     }

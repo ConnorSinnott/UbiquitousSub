@@ -31,9 +31,8 @@
             <intent-filter>
                 <action android:name="android.service.wallpaper.WallpaperService"/>
                 <action android:name="com.example.android.sunshine.app"/>
-
                 <category android:name="com.google.android.wearable.watchface.category.WATCH_FACE"/>
-                <action android:name="com.google.android.gms.wearable.BIND_LISTENER" />
+                <!--<action android:name="com.google.android.gms.wearable.BIND_LISTENER" />-->
             </intent-filter>
 
         </service>
