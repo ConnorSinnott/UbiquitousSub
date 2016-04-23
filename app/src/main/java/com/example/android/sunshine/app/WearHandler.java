@@ -98,6 +98,7 @@ public class WearHandler extends WearableListenerService implements Loader.OnLoa
 
     }
 
+    //From jeet.chanchawat http://stackoverflow.com/a/10703256
     public Bitmap getResizedBitmap(Bitmap bm, int newWidth, int newHeight) {
         int width = bm.getWidth();
         int height = bm.getHeight();
